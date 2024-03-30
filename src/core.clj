@@ -28,7 +28,6 @@
 
 
 
-
 (defn mask_output
   "For each vector of terms in the term_list, make the last z terms 0, and return the new vector of vectors."
   [term_list z]
@@ -36,28 +35,50 @@
                  (repeat z 0))
         term_list))
 
-(defn behavior_at_t
-  "Solves the Fourier series' with the specified terms at time t and returns the behavior vector."
-  [term_list t]
-  ; f(t) = a_0 + sigma[n=1 to N]( a_n*cos((2*pi*n*t)/p) + b_n*sin((2*pi*n*t)/p))
-  (let [p (/ (dec (count (first term_list))) 2)]
-    (let [omega (/ (* 2 math/PI t) p)]
-      (mapv #(let [terms %]
-               (let [pairs (partition 2 (rest terms))]
-                 (+ (get terms 0)
-                    (reduce + (map-indexed (fn [n pair]
-                                           (+ (* (first pair)  (math/sin (* omega n)))
-                                              (* (second pair) (math/cos (* omega n)))))
-                                           pairs)))))
-            term_list))))
+(defn calculate_omega
+  "Calculates omega, (2*pi*t)/p, which appears in the trig functions of the Fourier series terms."
+  [t p]
+  (/ (* 2 math/PI t) p))
 
+(defn evaluate_fourier
+  "Solves the Fourier series with the specified terms for omega (which includes t) and return the result."
+  [terms omega]
+  ; f(t) = a_0 + sigma[n=1 to N]( a_n*cos(omega*n) + b_n*sin(omega*n)), omega = (2*pi*t)/p
+  (let [pairs (partition 2 (rest terms))]
+    (+ (get terms 0)
+       (reduce + (map-indexed (fn [n pair]
+                                (+ (* (first pair)  (math/sin (* omega n)))
+                                   (* (second pair) (math/cos (* omega n)))))
+                              pairs)))))
+
+(defn evaluate_fourier_vector
+  ""
+  [term_vector t p]
+  (let [omega (calculate_omega t p)]
+    (mapv #(evaluate_fourier % omega)
+          term_vector)))
+
+(defn smooth_fourier
+  ""
+  [terms b t]
+  (if (zero? b)
+    (evaluate_fourier terms t)
+    ()))
+
+
+
+
+; I think my current approach is wrong.
+; I want to work with equations and stop trying to solve at t so quickly.
+; I should be passing the result of mask_output to smooth_func
 (defn simulate_entity
   "Simulate an entity for t steps with given precision for a specific state.
    Currently, this just returns a vector of behavior vectors for every t"
-  [entity precision t]
+  [entity precision t b]
   (let [masked_term_list (-> (get_behavior_func entity)
                              (mask_output precision))]
-    (map #(behavior_at_t masked_term_list %) (range 0 t))))
+    (map #(kernel_smooth evaluate_fourier_vector [masked_term_list %] b)
+         (range 0 t))))
 
 
 
